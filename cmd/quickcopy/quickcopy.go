@@ -31,13 +31,16 @@ type FieldMapping struct {
 }
 
 // 生成拷贝函数的模板
-const copyFuncTemplate = `{{- range .Fields }}
+const copyFuncTemplate = `// {{.FuncName}} 是一个自动生成的拷贝函数
+func {{.FuncName}}(dst *{{.DstType}}, src *{{.SrcType}}) {
+{{- range .Fields }}
 {{- if .Conversion }}
 	dst.{{.DstField}} = {{.Conversion}}(src.{{.SrcField}})
 {{- else }}
 	dst.{{.DstField}} = src.{{.SrcField}}
 {{- end }}
-{{- end }}`
+{{- end }}
+}`
 
 func main() {
 	// 要遍历的目录
@@ -100,8 +103,8 @@ func main() {
 				// 提取字段映射关系
 				fields := getFieldMappings(srcType, dstType, file)
 
-				// 生成拷贝函数实现
-				generateCopyFuncImpl(funcDecl, fields)
+				// 生成完整的拷贝函数
+				generateCompleteCopyFunc(file, funcDecl, fields)
 
 				// 将修改后的 AST 写回文件
 				writeFile(fset, file, path)
@@ -116,8 +119,8 @@ func main() {
 	}
 }
 
-// generateCopyFuncImpl 生成拷贝函数实现并插入到函数体中
-func generateCopyFuncImpl(funcDecl *ast.FuncDecl, fields []FieldMapping) {
+// generateCompleteCopyFunc 生成完整的拷贝函数并替换原始函数
+func generateCompleteCopyFunc(file *ast.File, funcDecl *ast.FuncDecl, fields []FieldMapping) {
 	// 生成拷贝函数代码
 	tmpl, err := template.New("copyFunc").Parse(copyFuncTemplate)
 	if err != nil {
@@ -127,8 +130,8 @@ func generateCopyFuncImpl(funcDecl *ast.FuncDecl, fields []FieldMapping) {
 	var code bytes.Buffer
 	err = tmpl.Execute(&code, CopyFuncInfo{
 		FuncName: funcDecl.Name.Name,
-		SrcType:  types.ExprString(funcDecl.Type.Params.List[0].Type),
-		DstType:  types.ExprString(funcDecl.Type.Params.List[1].Type),
+		SrcType:  strings.TrimPrefix(types.ExprString(funcDecl.Type.Params.List[0].Type), "*"),
+		DstType:  strings.TrimPrefix(types.ExprString(funcDecl.Type.Params.List[1].Type), "*"),
 		Fields:   fields,
 	})
 	if err != nil {
@@ -136,7 +139,7 @@ func generateCopyFuncImpl(funcDecl *ast.FuncDecl, fields []FieldMapping) {
 	}
 
 	// 将生成的代码包装在一个完整的 Go 文件中
-	wrappedCode := fmt.Sprintf("package main\n\nfunc temp() {\n%s\n}", code.String())
+	wrappedCode := fmt.Sprintf("package main\n\n%s", code.String())
 
 	// 将生成的代码解析为 AST
 	fset := token.NewFileSet()
@@ -145,9 +148,11 @@ func generateCopyFuncImpl(funcDecl *ast.FuncDecl, fields []FieldMapping) {
 		log.Fatalf("Failed to parse generated code: %v", err)
 	}
 
-	// 提取函数体中的语句
-	tempFunc := block.Decls[0].(*ast.FuncDecl)
-	funcDecl.Body.List = tempFunc.Body.List
+	// 提取生成的函数声明
+	newFuncDecl := block.Decls[0].(*ast.FuncDecl)
+
+	// 替换原始函数的声明
+	*funcDecl = *newFuncDecl
 }
 
 // writeFile 将修改后的 AST 写回文件
@@ -242,6 +247,10 @@ func getTypeConversion(srcType, dstType string) string {
 		return "fmt.Sprint"
 	case srcType == "string" && dstType == "int":
 		return "func(s string) int { i, _ := strconv.Atoi(s); return i }"
+	case srcType == "time.Time" && dstType == "string":
+		return "func(t time.Time) string { return t.Format(time.RFC3339) }"
+	case srcType == "string" && dstType == "time.Time":
+		return "func(s string) time.Time { t, _ := time.Parse(time.RFC3339, s); return t }"
 	default:
 		return ""
 	}

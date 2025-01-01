@@ -14,14 +14,14 @@ type copy2 struct {
 	D int64
 }
 
-// :quickcopy
-func QuickCopy(dst *copy1, src *copy2) {
+func QuickCopy(dst *copy2, src *copy1) {
 	dst.A = src.A
 	dst.B =
-		src.B
-	dst.
-		C = src.
+		src.
+
+			// :quickcopy
+			B
+	dst.C = src.
 		C
 	dst.D = src.D
-
 }
