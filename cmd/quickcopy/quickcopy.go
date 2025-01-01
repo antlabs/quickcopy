@@ -245,6 +245,7 @@ func findStructDef(typeName string, file *ast.File) *ast.StructType {
 
 // getTypeConversion 获取类型转换逻辑
 func getTypeConversion(srcType, dstType string) string {
+
 	switch {
 	case srcType == "int" && dstType == "string":
 		return "fmt.Sprint"
@@ -254,6 +255,10 @@ func getTypeConversion(srcType, dstType string) string {
 		return "func(t time.Time) string { return t.Format(time.RFC3339) }"
 	case srcType == "string" && dstType == "time.Time":
 		return "func(s string) time.Time { t, _ := time.Parse(time.RFC3339, s); return t }"
+	case srcType == "uuid.UUID" && dstType == "string":
+		return "func(u uuid.UUID) string { return u.String() }"
+	case srcType == "string" && dstType == "uuid.UUID":
+		return "func(s string) uuid.UUID { u, _ := uuid.Parse(s); return u }"
 	default:
 		return ""
 	}
