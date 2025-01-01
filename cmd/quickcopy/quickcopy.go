@@ -101,7 +101,7 @@ func main() {
 				fields := getFieldMappings(srcType, dstType, file)
 
 				// 生成拷贝函数实现
-				generateCopyFuncImpl(file, funcDecl, fields)
+				generateCopyFuncImpl(funcDecl, fields)
 
 				// 将修改后的 AST 写回文件
 				writeFile(fset, file, path)
@@ -117,14 +117,14 @@ func main() {
 }
 
 // generateCopyFuncImpl 生成拷贝函数实现并插入到函数体中
-func generateCopyFuncImpl(file *ast.File, funcDecl *ast.FuncDecl, fields []FieldMapping) {
+func generateCopyFuncImpl(funcDecl *ast.FuncDecl, fields []FieldMapping) {
 	// 生成拷贝函数代码
 	tmpl, err := template.New("copyFunc").Parse(copyFuncTemplate)
 	if err != nil {
 		log.Fatalf("Failed to parse template: %v", err)
 	}
 
-	var code strings.Builder
+	var code bytes.Buffer
 	err = tmpl.Execute(&code, CopyFuncInfo{
 		FuncName: funcDecl.Name.Name,
 		SrcType:  types.ExprString(funcDecl.Type.Params.List[0].Type),
@@ -135,12 +135,12 @@ func generateCopyFuncImpl(file *ast.File, funcDecl *ast.FuncDecl, fields []Field
 		log.Fatalf("Failed to execute template: %v", err)
 	}
 
-	// 将生成的代码包装在一个完整的函数体中
-	funcBody := fmt.Sprintf("package main\n\nfunc temp() {\n%s\n}", code.String())
+	// 将生成的代码包装在一个完整的 Go 文件中
+	wrappedCode := fmt.Sprintf("package main\n\nfunc temp() {\n%s\n}", code.String())
 
 	// 将生成的代码解析为 AST
 	fset := token.NewFileSet()
-	block, err := parser.ParseFile(fset, "", funcBody, parser.ParseComments)
+	block, err := parser.ParseFile(fset, "", wrappedCode, parser.ParseComments)
 	if err != nil {
 		log.Fatalf("Failed to parse generated code: %v", err)
 	}
