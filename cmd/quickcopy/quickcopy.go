@@ -104,7 +104,7 @@ func main() {
 				fields := getFieldMappings(srcType, dstType, file)
 
 				// 生成完整的拷贝函数
-				generateCompleteCopyFunc(file, funcDecl, fields)
+				generateCompleteCopyFunc(funcDecl, fields)
 
 				// 将修改后的 AST 写回文件
 				writeFile(fset, file, path)
@@ -120,7 +120,7 @@ func main() {
 }
 
 // generateCompleteCopyFunc 生成完整的拷贝函数并替换原始函数
-func generateCompleteCopyFunc(file *ast.File, funcDecl *ast.FuncDecl, fields []FieldMapping) {
+func generateCompleteCopyFunc(funcDecl *ast.FuncDecl, fields []FieldMapping) {
 	// 生成拷贝函数代码
 	tmpl, err := template.New("copyFunc").Parse(copyFuncTemplate)
 	if err != nil {
