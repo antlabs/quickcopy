@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"fmt"
 	"go/ast"
-	"go/format"
 	"go/parser"
+	"go/printer"
 	"go/token"
 	"go/types"
 	"log"
@@ -92,8 +92,8 @@ func main() {
 					log.Fatalf("Copy function %s must have exactly two parameters", funcDecl.Name.Name)
 				}
 
-				srcParam := funcDecl.Type.Params.List[0]
-				dstParam := funcDecl.Type.Params.List[1]
+				dstParam := funcDecl.Type.Params.List[0]
+				srcParam := funcDecl.Type.Params.List[1]
 
 				srcType := strings.TrimPrefix(types.ExprString(srcParam.Type), "*")
 				dstType := strings.TrimPrefix(types.ExprString(dstParam.Type), "*")
@@ -151,8 +151,13 @@ func generateCompleteCopyFunc(file *ast.File, funcDecl *ast.FuncDecl, fields []F
 	// 提取生成的函数声明
 	newFuncDecl := block.Decls[0].(*ast.FuncDecl)
 
+	// 将原始函数的注释附加到新生成的函数上
+	if funcDecl.Doc != nil {
+		newFuncDecl.Doc = funcDecl.Doc
+	}
+
+	funcDecl.Body = newFuncDecl.Body
 	// 替换原始函数的声明
-	*funcDecl = *newFuncDecl
 }
 
 // writeFile 将修改后的 AST 写回文件
@@ -166,11 +171,9 @@ func writeFile(fset *token.FileSet, file *ast.File, path string) {
 
 	// 格式化整个文件
 	var buf bytes.Buffer
-	err = format.Node(&buf, fset, file)
-	if err != nil {
-		log.Fatalf("Failed to format file: %v", err)
-	}
 
+	cfg := &printer.Config{Mode: printer.UseSpaces | printer.TabIndent, Tabwidth: 8}
+	cfg.Fprint(&buf, fset, file)
 	// 将格式化后的内容写入文件
 	_, err = outputFile.Write(buf.Bytes())
 	if err != nil {
