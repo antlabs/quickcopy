@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"strings"
 	"text/template"
+
+	"golang.org/x/tools/go/packages"
 )
 
 // CopyFuncInfo 存储拷贝函数信息
@@ -130,8 +132,8 @@ func generateCompleteCopyFunc(funcDecl *ast.FuncDecl, fields []FieldMapping) {
 	var code bytes.Buffer
 	err = tmpl.Execute(&code, CopyFuncInfo{
 		FuncName: funcDecl.Name.Name,
-		SrcType:  strings.TrimPrefix(types.ExprString(funcDecl.Type.Params.List[0].Type), "*"),
-		DstType:  strings.TrimPrefix(types.ExprString(funcDecl.Type.Params.List[1].Type), "*"),
+		SrcType:  strings.TrimPrefix(types.ExprString(funcDecl.Type.Params.List[1].Type), "*"),
+		DstType:  strings.TrimPrefix(types.ExprString(funcDecl.Type.Params.List[0].Type), "*"),
 		Fields:   fields,
 	})
 	if err != nil {
@@ -157,7 +159,6 @@ func generateCompleteCopyFunc(funcDecl *ast.FuncDecl, fields []FieldMapping) {
 	}
 
 	funcDecl.Body = newFuncDecl.Body
-	// 替换原始函数的声明
 }
 
 // writeFile 将修改后的 AST 写回文件
@@ -215,8 +216,80 @@ func getFieldMappings(srcType, dstType string, file *ast.File) []FieldMapping {
 	return fields
 }
 
+// getPackagePathAndTypeName 解析包路径和类型名称
+func getPackagePathAndTypeName(typeExpr string) (pkgPath, typeName string) {
+	parts := strings.Split(typeExpr, ".")
+	if len(parts) == 2 {
+		return parts[0], parts[1]
+	}
+	return "", typeExpr
+}
+
+// findStructDefInPackage 在包中查找结构体定义
+// findStructDefInPackage 在包中查找结构体定义
+func findStructDefInPackage(pkgPath, structName string) (structType *ast.StructType) {
+	// 配置 packages.Config
+	cfg := &packages.Config{
+		Mode: packages.NeedName |
+			packages.NeedSyntax |
+			packages.NeedTypes |
+			packages.NeedDeps,
+	}
+
+	// 加载包
+	pkgs, err := packages.Load(cfg, pkgPath)
+	if err != nil {
+		log.Printf("Failed to load package %s: %v", pkgPath, err)
+		return nil
+	}
+
+	if len(pkgs) == 0 {
+		log.Printf("No packages found for %s", pkgPath)
+		return nil
+	}
+
+	// 遍历包中的文件
+	for _, pkg := range pkgs {
+		log.Printf("Inspecting package: %s, syntax: %d\n", pkg.PkgPath, len(pkg.Syntax))
+		for _, file := range pkg.Syntax {
+			// 遍历 AST
+			ast.Inspect(file, func(n ast.Node) bool {
+				// 查找类型声明
+				ts, ok := n.(*ast.TypeSpec)
+				if !ok {
+					return true
+				}
+
+				log.Printf("Found type: %s", ts.Name.Name)
+				if ts.Name.Name != structName {
+					return true // 继续遍历
+				}
+
+				// 找到目标结构体
+				log.Printf("Found type: %s, struceName:%s\n", ts.Name.Name, structName)
+				if structType, ok = ts.Type.(*ast.StructType); ok {
+					log.Printf("Type %s is a struct with fields:", ts.Name.Name)
+					for _, field := range structType.Fields.List {
+						for _, fieldName := range field.Names {
+							log.Printf("  - %s", fieldName.Name)
+						}
+					}
+					return false // 退出遍历
+				}
+				return true
+			})
+		}
+	}
+
+	if structType == nil {
+		log.Printf("Struct definition not found: %s in package %s", structName, pkgPath)
+	}
+	return structType
+}
+
 // findStructDef 查找结构体定义
 func findStructDef(typeName string, file *ast.File) *ast.StructType {
+	// 首先在当前文件中查找
 	for _, decl := range file.Decls {
 		genDecl, ok := decl.(*ast.GenDecl)
 		if !ok || genDecl.Tok != token.TYPE {
@@ -239,13 +312,39 @@ func findStructDef(typeName string, file *ast.File) *ast.StructType {
 		}
 	}
 
-	log.Printf("Struct definition not found: %s", typeName)
-	return nil
+	// 如果当前文件中没有找到，尝试在包中查找
+	pkgPath, typeName := getPackagePathAndTypeName(typeName)
+	if pkgPath == "" {
+		log.Printf("Struct definition not found: %s", typeName)
+		return nil
+	}
+
+	// 从文件的 imports 中查找完整的包路径
+	var fullPkgPath string
+	for _, imp := range file.Imports {
+		impPath := strings.Trim(imp.Path.Value, `"`)
+		if strings.HasSuffix(impPath, pkgPath) {
+			fullPkgPath = impPath
+			break
+		}
+	}
+
+	if fullPkgPath == "" {
+		log.Printf("Package path not found in imports: %s", pkgPath)
+		return nil
+	}
+
+	structType := findStructDefInPackage(fullPkgPath, typeName)
+	if structType == nil {
+		log.Printf("Struct definition not found: %s in package %s", typeName, fullPkgPath)
+		return nil
+	}
+
+	return structType
 }
 
 // getTypeConversion 获取类型转换逻辑
 func getTypeConversion(srcType, dstType string) string {
-
 	switch {
 	case srcType == "int" && dstType == "string":
 		return "fmt.Sprint"
