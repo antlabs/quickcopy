@@ -17,13 +17,13 @@
 ### 方式1：直接安装
 
 ```bash
-go get github.com/guonaihong/quickcopy/cmd/quickcopy
+go get github.com/antlabs/quickcopy/cmd/quickcopy
 ```
 
 ### 方式2：从源码编译
 
 ```bash
-git clone https://github.com/guonaihong/quickcopy.git
+git clone https://github.com/antlabs/quickcopy.git
 cd quickcopy
 make
 ```

@@ -1,4 +1,4 @@
-module github.com/guonaihong/quickcopy
+module github.com/antlabs/quickcopy
 
 go 1.23.3
 
