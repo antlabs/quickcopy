@@ -20,6 +20,8 @@ import (
 // CopyFuncInfo 存储拷贝函数信息
 type CopyFuncInfo struct {
 	FuncName string
+	SrcVar   string
+	DstVar   string
 	SrcType  string
 	DstType  string
 	Fields   []FieldMapping
@@ -34,12 +36,12 @@ type FieldMapping struct {
 
 // 生成拷贝函数的模板
 const copyFuncTemplate = `// {{.FuncName}} 是一个自动生成的拷贝函数
-func {{.FuncName}}(dst *{{.DstType}}, src *{{.SrcType}}) {
+func {{.FuncName}}({{.DstVar}} *{{.DstType}}, {{.SrcVar}} *{{.SrcType}}) {
 {{- range .Fields }}
 {{- if .Conversion }}
-	dst.{{.DstField}} = {{.Conversion}}(src.{{.SrcField}})
+	{{$.DstVar}}.{{.DstField}} = {{.Conversion}}({{$.SrcVar}}.{{.SrcField}})
 {{- else }}
-	dst.{{.DstField}} = src.{{.SrcField}}
+	{{$.DstVar}}.{{.DstField}} = {{$.SrcVar}}.{{.SrcField}}
 {{- end }}
 {{- end }}
 }`
@@ -97,6 +99,9 @@ func main() {
 				dstParam := funcDecl.Type.Params.List[0]
 				srcParam := funcDecl.Type.Params.List[1]
 
+				srcVar := srcParam.Names[0].Name
+				dstVar := dstParam.Names[0].Name
+
 				srcType := strings.TrimPrefix(types.ExprString(srcParam.Type), "*")
 				dstType := strings.TrimPrefix(types.ExprString(dstParam.Type), "*")
 
@@ -106,7 +111,7 @@ func main() {
 				fields := getFieldMappings(srcType, dstType, file)
 
 				// 生成完整的拷贝函数
-				generateCompleteCopyFunc(funcDecl, fields)
+				generateCompleteCopyFunc(funcDecl, srcVar, dstVar, srcType, dstType, fields)
 
 				// 将修改后的 AST 写回文件
 				writeFile(fset, file, path)
@@ -122,7 +127,7 @@ func main() {
 }
 
 // generateCompleteCopyFunc 生成完整的拷贝函数并替换原始函数
-func generateCompleteCopyFunc(funcDecl *ast.FuncDecl, fields []FieldMapping) {
+func generateCompleteCopyFunc(funcDecl *ast.FuncDecl, srcVar, dstVar, srcType, dstType string, fields []FieldMapping) {
 	// 生成拷贝函数代码
 	tmpl, err := template.New("copyFunc").Parse(copyFuncTemplate)
 	if err != nil {
@@ -132,8 +137,10 @@ func generateCompleteCopyFunc(funcDecl *ast.FuncDecl, fields []FieldMapping) {
 	var code bytes.Buffer
 	err = tmpl.Execute(&code, CopyFuncInfo{
 		FuncName: funcDecl.Name.Name,
-		SrcType:  strings.TrimPrefix(types.ExprString(funcDecl.Type.Params.List[1].Type), "*"),
-		DstType:  strings.TrimPrefix(types.ExprString(funcDecl.Type.Params.List[0].Type), "*"),
+		SrcVar:   srcVar,
+		DstVar:   dstVar,
+		SrcType:  srcType,
+		DstType:  dstType,
 		Fields:   fields,
 	})
 	if err != nil {
@@ -225,7 +232,6 @@ func getPackagePathAndTypeName(typeExpr string) (pkgPath, typeName string) {
 	return "", typeExpr
 }
 
-// findStructDefInPackage 在包中查找结构体定义
 // findStructDefInPackage 在包中查找结构体定义
 func findStructDefInPackage(pkgPath, structName string) (structType *ast.StructType) {
 	// 配置 packages.Config
