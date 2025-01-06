@@ -79,9 +79,22 @@ func main() {
 
 				// 检查是否有 // :quickcopy 注释
 				var isQuickCopy bool
+				var allowNarrow bool
+				var ignoreCase bool
+				var singleToSlice bool // 新增选项
 				for _, comment := range funcDecl.Doc.List {
 					if strings.Contains(comment.Text, "// :quickcopy") {
 						isQuickCopy = true
+						// 检查是否包含 --allow-narrow 选项
+						if strings.Contains(comment.Text, "--allow-narrow") {
+							allowNarrow = true
+						}
+						if strings.Contains(comment.Text, "--ignore-case") {
+							ignoreCase = true
+						}
+						if strings.Contains(comment.Text, "--single-to-slice") {
+							singleToSlice = true // 启用单个元素赋值给切片的功能
+						}
 						break
 					}
 				}
@@ -108,7 +121,7 @@ func main() {
 				log.Printf("Source type: %s, Destination type: %s", srcType, dstType)
 
 				// 提取字段映射关系
-				fields := getFieldMappings(srcType, dstType, file)
+				fields := getFieldMappings(srcType, dstType, file, ignoreCase, allowNarrow, singleToSlice)
 
 				// 生成完整的拷贝函数
 				generateCompleteCopyFunc(funcDecl, srcVar, dstVar, srcType, dstType, fields)
@@ -189,38 +202,6 @@ func writeFile(fset *token.FileSet, file *ast.File, path string) {
 	}
 
 	log.Printf("Successfully updated and formatted file: %s", path)
-}
-
-// getFieldMappings 获取字段映射关系
-func getFieldMappings(srcType, dstType string, file *ast.File) []FieldMapping {
-	var fields []FieldMapping
-
-	// 查找源类型和目标类型的结构体定义
-	srcStruct := findStructDef(srcType, file)
-	dstStruct := findStructDef(dstType, file)
-
-	if srcStruct == nil || dstStruct == nil {
-		log.Fatalf("Failed to find struct definitions for %s or %s", srcType, dstType)
-	}
-
-	log.Printf("Found struct definitions: %s and %s", srcType, dstType)
-
-	// 提取字段映射关系
-	for _, srcField := range srcStruct.Fields.List {
-		for _, dstField := range dstStruct.Fields.List {
-			if srcField.Names[0].Name == dstField.Names[0].Name {
-				conversion := getTypeConversion(types.ExprString(srcField.Type), types.ExprString(dstField.Type))
-				fields = append(fields, FieldMapping{
-					SrcField:   srcField.Names[0].Name,
-					DstField:   dstField.Names[0].Name,
-					Conversion: conversion,
-				})
-				log.Printf("Mapped field: %s -> %s (Conversion: %s)", srcField.Names[0].Name, dstField.Names[0].Name, conversion)
-			}
-		}
-	}
-
-	return fields
 }
 
 // getPackagePathAndTypeName 解析包路径和类型名称
@@ -349,8 +330,93 @@ func findStructDef(typeName string, file *ast.File) *ast.StructType {
 	return structType
 }
 
+// getFieldMappings 获取字段映射关系
+func getFieldMappings(srcType, dstType string, file *ast.File, ignoreCase, allowNarrow, singleToSlice bool) []FieldMapping {
+	var fields []FieldMapping
+
+	// 查找源类型和目标类型的结构体定义
+	srcStruct := findStructDef(srcType, file)
+	dstStruct := findStructDef(dstType, file)
+
+	if srcStruct == nil || dstStruct == nil {
+		log.Fatalf("Failed to find struct definitions for %s or %s", srcType, dstType)
+	}
+
+	log.Printf("Found struct definitions: %s and %s", srcType, dstType)
+
+	// 提取字段映射关系
+	for _, srcField := range srcStruct.Fields.List {
+		for _, dstField := range dstStruct.Fields.List {
+			if ignoreCase {
+				if strings.ToLower(srcField.Names[0].Name) == strings.ToLower(dstField.Names[0].Name) {
+					conversion := getTypeConversion(types.ExprString(srcField.Type), types.ExprString(dstField.Type), allowNarrow, singleToSlice)
+					fields = append(fields, FieldMapping{
+						SrcField:   srcField.Names[0].Name,
+						DstField:   dstField.Names[0].Name,
+						Conversion: conversion,
+					})
+					log.Printf("Mapped field: %s -> %s (Conversion: %s)", srcField.Names[0].Name, dstField.Names[0].Name, conversion)
+				}
+			} else {
+				if srcField.Names[0].Name == dstField.Names[0].Name {
+					conversion := getTypeConversion(types.ExprString(srcField.Type), types.ExprString(dstField.Type), allowNarrow, singleToSlice)
+					fields = append(fields, FieldMapping{
+						SrcField:   srcField.Names[0].Name,
+						DstField:   dstField.Names[0].Name,
+						Conversion: conversion,
+					})
+					log.Printf("Mapped field: %s -> %s (Conversion: %s)", srcField.Names[0].Name, dstField.Names[0].Name, conversion)
+				}
+			}
+		}
+	}
+
+	return fields
+}
+
 // getTypeConversion 获取类型转换逻辑
-func getTypeConversion(srcType, dstType string) string {
+func getTypeConversion(srcType, dstType string, allowNarrow, singleToSlice bool) string {
+	// 处理数组和切片类型（仅在启用 singleToSlice 时）
+	if singleToSlice && (strings.HasPrefix(dstType, "[]") || strings.Contains(dstType, "[")) {
+		// 如果目标类型是切片或数组，且源类型是单个元素类型
+		if !strings.HasPrefix(srcType, "[]") && !strings.Contains(srcType, "[") {
+			// 获取目标类型的元素类型
+			dstElemType := strings.TrimPrefix(dstType, "[]")
+			dstElemType = strings.Split(dstElemType, "[")[0]
+
+			// 如果源类型和目标元素类型相同，则直接赋值
+			if srcType == dstElemType {
+				return fmt.Sprintf("func(src %s) %s { return []%s{src} }", srcType, dstType, dstElemType)
+			}
+
+			// 如果需要进行类型转换，则生成相应的转换函数
+			conversion := getTypeConversion(srcType, dstElemType, allowNarrow, singleToSlice)
+			if conversion != "" {
+				return fmt.Sprintf("func(src %s) %s { return []%s{%s(src)} }", srcType, dstType, dstElemType, conversion)
+			}
+		}
+	}
+
+	// 处理整数类型转换
+	if isIntegerType(srcType) && isIntegerType(dstType) {
+		srcWidth := getIntWidth(srcType)
+		dstWidth := getIntWidth(dstType)
+
+		// 如果源类型和目标类型不同，则需要显式转换
+		if srcType != dstType {
+			// 如果是窄化转换（高宽度到低宽度），检查是否允许
+			if srcWidth > dstWidth {
+				if !allowNarrow {
+					log.Printf("Warning: Narrowing conversion from %s to %s is not allowed", srcType, dstType)
+					return "" // 不允许窄化转换
+				}
+				log.Printf("Warning: Narrowing conversion from %s to %s may lose data", srcType, dstType)
+			}
+			return dstType
+		}
+	}
+
+	// 处理其他类型的转换
 	switch {
 	case srcType == "int" && dstType == "string":
 		return "fmt.Sprint"
@@ -366,5 +432,34 @@ func getTypeConversion(srcType, dstType string) string {
 		return "func(s string) uuid.UUID { u, _ := uuid.Parse(s); return u }"
 	default:
 		return ""
+	}
+}
+
+func isIntegerType(typeName string) bool {
+	switch typeName {
+	case "int", "int8", "int16", "int32", "int64",
+		"uint", "uint8", "uint16", "uint32", "uint64":
+		return true
+	default:
+		return false
+	}
+}
+
+// getIntWidth 获取整数类型的宽度
+func getIntWidth(typeName string) int {
+	switch typeName {
+	case "int8", "uint8":
+		return 8
+	case "int16", "uint16":
+		return 16
+	case "int32", "uint32":
+		return 32
+	case "int64", "uint64":
+		return 64
+	case "int", "uint":
+		// 假设 int 和 uint 是 64 位的
+		return 64
+	default:
+		return 0
 	}
 }

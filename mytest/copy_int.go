@@ -1,7 +1,5 @@
 package mytest
 
-import "fmt"
-
 type copy1 struct {
 	A int8
 	B int16
@@ -28,8 +26,4 @@ func QuickCopy(dst *copy1, src *copy2) {
 			C
 	dst.D = src.
 		D
-}
-
-func test() {
-	fmt.Printf("test\n")
 }
