@@ -12,10 +12,10 @@ type mappingDestination struct {
 
 // :quickcopy Module = ModuleName, Field2 = FieldName2
 func mappingCopy(dst *mappingDestination, src *mappingSource) {
-	dst.Module =
+	dst.Field2 =
 		src.
-			ModuleName
-	dst.Field2 = src.FieldName2
+			FieldName2
+	dst.Module = src.ModuleName
 }
 
 type Source struct {
