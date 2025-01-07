@@ -81,11 +81,12 @@ func main() {
 				var isQuickCopy bool
 				var allowNarrow bool
 				var ignoreCase bool
-				var singleToSlice bool // 新增选项
+				var singleToSlice bool
+				var fieldMappings map[string]string // 存储字段映射规则
 				for _, comment := range funcDecl.Doc.List {
 					if strings.Contains(comment.Text, "// :quickcopy") {
 						isQuickCopy = true
-						// 检查是否包含 --allow-narrow 选项
+						// 解析选项
 						if strings.Contains(comment.Text, "--allow-narrow") {
 							allowNarrow = true
 						}
@@ -93,8 +94,10 @@ func main() {
 							ignoreCase = true
 						}
 						if strings.Contains(comment.Text, "--single-to-slice") {
-							singleToSlice = true // 启用单个元素赋值给切片的功能
+							singleToSlice = true
 						}
+						// 解析字段映射规则
+						fieldMappings = parseFieldMappings(comment.Text)
 						break
 					}
 				}
@@ -121,7 +124,7 @@ func main() {
 				log.Printf("Source type: %s, Destination type: %s", srcType, dstType)
 
 				// 提取字段映射关系
-				fields := getFieldMappings(srcType, dstType, file, ignoreCase, allowNarrow, singleToSlice)
+				fields := getFieldMappings(srcType, dstType, file, ignoreCase, allowNarrow, singleToSlice, fieldMappings)
 
 				// 生成完整的拷贝函数
 				generateCompleteCopyFunc(funcDecl, srcVar, dstVar, srcType, dstType, fields)
@@ -137,6 +140,38 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to walk directory: %v", err)
 	}
+}
+
+// parseFieldMappings 解析字段映射规则
+func parseFieldMappings(comment string) map[string]string {
+	mappings := make(map[string]string)
+	// 提取映射规则部分
+	start := strings.Index(comment, "// :quickcopy")
+	if start == -1 {
+		return mappings
+	}
+	// 去掉注释前缀
+	rulePart := strings.TrimSpace(comment[start+len("// :quickcopy"):])
+	// 按逗号分割规则
+	rules := strings.Split(rulePart, ",")
+	for _, rule := range rules {
+		rule = strings.TrimSpace(rule)
+		if rule == "" {
+			continue
+		}
+		// 解析 dstField = srcField
+		parts := strings.Split(rule, "=")
+		if len(parts) != 2 {
+			log.Printf("Invalid mapping rule: %s", rule)
+			continue
+		}
+		dstField := strings.TrimSpace(parts[0])
+		srcField := strings.TrimSpace(parts[1])
+
+		// 存储完整的字段路径
+		mappings[dstField] = srcField
+	}
+	return mappings
 }
 
 // generateCompleteCopyFunc 生成完整的拷贝函数并替换原始函数
@@ -330,8 +365,19 @@ func findStructDef(typeName string, file *ast.File) *ast.StructType {
 	return structType
 }
 
+// extractFieldName 从字段路径中提取字段名
+func extractFieldName(fieldPath string) string {
+	// 按点号分割路径
+	parts := strings.Split(fieldPath, ".")
+	if len(parts) == 0 {
+		return ""
+	}
+	// 返回最后一个部分（字段名）
+	return parts[len(parts)-1]
+}
+
 // getFieldMappings 获取字段映射关系
-func getFieldMappings(srcType, dstType string, file *ast.File, ignoreCase, allowNarrow, singleToSlice bool) []FieldMapping {
+func getFieldMappings(srcType, dstType string, file *ast.File, ignoreCase, allowNarrow, singleToSlice bool, fieldMappings map[string]string) []FieldMapping {
 	var fields []FieldMapping
 
 	// 查找源类型和目标类型的结构体定义
@@ -344,34 +390,105 @@ func getFieldMappings(srcType, dstType string, file *ast.File, ignoreCase, allow
 
 	log.Printf("Found struct definitions: %s and %s", srcType, dstType)
 
-	// 提取字段映射关系
-	for _, srcField := range srcStruct.Fields.List {
-		for _, dstField := range dstStruct.Fields.List {
+	// 用于记录已经映射的目标字段
+	mappedDstFields := make(map[string]bool)
+
+	// 如果有显式的字段映射规则，则按照规则进行映射
+	for dstFieldPath, srcFieldPath := range fieldMappings {
+		// 查找目标字段
+		dstFieldName := extractFieldName(dstFieldPath)
+		dstField := findFieldByName(dstStruct, dstFieldName)
+		if dstField == nil {
+			log.Printf("Destination field not found: %s", dstFieldName)
+			continue
+		}
+
+		// 查找源字段
+		srcFieldName := extractFieldName(srcFieldPath)
+		srcField := findFieldByName(srcStruct, srcFieldName)
+		if srcField == nil {
+			log.Printf("Source field not found: %s", srcFieldName)
+			continue
+		}
+
+		// 获取类型转换逻辑
+		conversion := getTypeConversion(types.ExprString(srcField.Type), types.ExprString(dstField.Type), allowNarrow, singleToSlice)
+
+		// 存储映射关系
+		fields = append(fields, FieldMapping{
+			SrcField:   srcFieldPath, // 使用完整的源字段路径
+			DstField:   dstFieldPath, // 使用完整的目标字段路径
+			Conversion: conversion,
+		})
+		log.Printf("Mapped field: %s -> %s (Conversion: %s)", srcFieldPath, dstFieldPath, conversion)
+
+		// 标记该目标字段已经映射
+		mappedDstFields[dstFieldName] = true
+	}
+
+	// 遍历目标结构体的字段，处理未映射的字段
+	for _, dstField := range dstStruct.Fields.List {
+		for _, dstFieldName := range dstField.Names {
+			// 如果目标字段已经映射过，则跳过
+			if mappedDstFields[dstFieldName.Name] {
+				continue
+			}
+
+			// 查找源结构体中是否有同名字段（支持忽略大小写）
+			var srcField *ast.Field
+			var srcFieldName string
 			if ignoreCase {
-				if strings.ToLower(srcField.Names[0].Name) == strings.ToLower(dstField.Names[0].Name) {
-					conversion := getTypeConversion(types.ExprString(srcField.Type), types.ExprString(dstField.Type), allowNarrow, singleToSlice)
-					fields = append(fields, FieldMapping{
-						SrcField:   srcField.Names[0].Name,
-						DstField:   dstField.Names[0].Name,
-						Conversion: conversion,
-					})
-					log.Printf("Mapped field: %s -> %s (Conversion: %s)", srcField.Names[0].Name, dstField.Names[0].Name, conversion)
-				}
+				srcField, srcFieldName = findFieldByNameIgnoreCase(srcStruct, dstFieldName.Name)
 			} else {
-				if srcField.Names[0].Name == dstField.Names[0].Name {
-					conversion := getTypeConversion(types.ExprString(srcField.Type), types.ExprString(dstField.Type), allowNarrow, singleToSlice)
-					fields = append(fields, FieldMapping{
-						SrcField:   srcField.Names[0].Name,
-						DstField:   dstField.Names[0].Name,
-						Conversion: conversion,
-					})
-					log.Printf("Mapped field: %s -> %s (Conversion: %s)", srcField.Names[0].Name, dstField.Names[0].Name, conversion)
+				srcField = findFieldByName(srcStruct, dstFieldName.Name)
+				if srcField != nil {
+					srcFieldName = srcField.Names[0].Name
 				}
 			}
+
+			if srcField == nil {
+				log.Printf("Source field not found for destination field: %s", dstFieldName.Name)
+				continue
+			}
+
+			// 获取类型转换逻辑
+			conversion := getTypeConversion(types.ExprString(srcField.Type), types.ExprString(dstField.Type), allowNarrow, singleToSlice)
+
+			// 存储映射关系
+			fields = append(fields, FieldMapping{
+				SrcField:   srcFieldName,      // 使用源字段的原始名称
+				DstField:   dstFieldName.Name, // 使用目标字段的原始名称
+				Conversion: conversion,
+			})
+			log.Printf("Mapped field: %s -> %s (Conversion: %s)", srcFieldName, dstFieldName.Name, conversion)
 		}
 	}
 
 	return fields
+}
+
+// findFieldByNameIgnoreCase 在结构体中查找字段（忽略大小写），并返回匹配的字段及其原始名称
+func findFieldByNameIgnoreCase(structType *ast.StructType, fieldName string) (*ast.Field, string) {
+	for _, field := range structType.Fields.List {
+		for _, name := range field.Names {
+			if strings.EqualFold(name.Name, fieldName) {
+				return field, name.Name // 返回字段及其原始名称
+			}
+		}
+	}
+	return nil, ""
+}
+
+// findFieldByName 在结构体中查找字段
+func findFieldByName(structType *ast.StructType, fieldName string) *ast.Field {
+	for _, field := range structType.Fields.List {
+		for _, name := range field.Names {
+			if name.Name == fieldName {
+				return field
+			}
+		}
+	}
+	return nil
 }
 
 // getTypeConversion 获取类型转换逻辑

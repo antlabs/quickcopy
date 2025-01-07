@@ -16,14 +16,11 @@ type copy2 struct {
 
 // :quickcopy
 func QuickCopy(dst *copy1, src *copy2) {
-	dst.
-		A = src.
-		A
-	dst.
-		B = src.B
-	dst.C =
+	dst.A = src.A
+	dst.B =
 		src.
-			C
-	dst.D = src.
-		D
+			B
+	dst.C = src.
+		C
+	dst.D = src.D
 }
