@@ -783,6 +783,12 @@ func handleSliceConversion(srcType, dstType string, allowNarrow, singleToSlice b
 }
 
 func generateSliceCopyFunc(srcElem, dstElem, elemConv string, file *ast.File) string {
+	// 检查是否已经生成过
+	funcName := getSliceCopyFuncName(srcElem, dstElem)
+	if _, loaded := generatedFunctions.Load(funcName); loaded {
+		return funcName
+	}
+
 	// 处理file为nil的情况
 	srcIsStruct := file != nil && isStructType(srcElem, file)
 	dstIsStruct := file != nil && isStructType(dstElem, file)
@@ -795,11 +801,6 @@ func generateSliceCopyFunc(srcElem, dstElem, elemConv string, file *ast.File) st
 	// 需要转换函数时，确保elemConv非空
 	if elemConv == "" {
 		log.Printf("elemConv is required for struct elements but is empty")
-		return ""
-	}
-
-	funcName := getSliceCopyFuncName(srcElem, dstElem)
-	if _, loaded := generatedFunctions.Load(funcName); loaded {
 		return ""
 	}
 
