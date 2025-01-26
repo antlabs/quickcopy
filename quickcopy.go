@@ -280,9 +280,7 @@ func {{.FuncName}}({{.DstVar}} *{{.DstType}}, {{.SrcVar}} *{{.SrcType}}) {
 }`
 
 func addGeneratedFunction(funcName string, fn *ast.FuncDecl) {
-	if _, loaded := generatedFunctions.LoadOrStore(funcName, fn); loaded {
-		panic(fmt.Sprintf("Function %s already generated", funcName))
-	}
+	log.Printf("Adding generated function: %s", funcName)
 	generatedFunctions.Store(funcName, fn)
 }
 
@@ -382,7 +380,7 @@ func writeFile(fset *token.FileSet, file *ast.File, path string) {
 			// 追加新的函数声明
 			file.Decls = append(file.Decls, newFn)
 		}
-		return false
+		return true
 	})
 
 	// 清空注册表
@@ -775,6 +773,7 @@ func handleSliceConversion(srcType, dstType string, allowNarrow, singleToSlice b
 
 	// 只有当元素类型需要转换时才生成切片函数
 	if elemConv != "" {
+		log.Printf("Generating slice conversion function for %s to %s, funcName: %s", srcType, dstType, elemConv)
 		return generateSliceCopyFunc(srcElem, dstElem, elemConv, file)
 	}
 	return "" // 直接赋值
