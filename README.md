@@ -27,9 +27,19 @@
   - 默认情况下，字段名比较区分大小写。
   - 可以通过 `--ignore-case` 选项来忽略字段名的大小写，使得字段名的匹配不区分大小写。
 
+- **模糊字段映射**：
+  - 支持通过注释指定源结构体和目标结构体之间的字段映射规则。
+  - 可以处理字段名称不完全匹配的情况。
+  - 未指定映射规则的字段会自动按名称匹配（支持忽略大小写）。
+  - 支持嵌套结构体的字段映射
+
 - **单个元素与数组转换**：
   - 支持将单个元素赋值给数组，以及从数组中提取单个元素进行赋值。
-  - 可以通过 `--single-to-slice` 选项启用此功能。该选项允许在拷贝函数中将单个元素转换为数组或从数组中提取单个元素。
+  - 可以通过 `--single-to-slice` 选项启用此功能。
+  - 支持以下转换场景：
+    - 单个元素转换为长度为1的数组
+    - 从数组中提取第一个元素赋值给单个字段
+    - 自动处理类型转换，如 `int` 到 `[]string`
 
 ## 安装
 
@@ -117,20 +127,118 @@ func CopyData(dst *Destination, src *Source) {
 
 ## 配置选项
 
-- `AllowNarrowingConversion`：
-  - 类型：`bool`
-  - 默认值：`false`
-  - 描述：是否允许窄化转换。
-
+### `--ignore-case`
+例如：
 ```go
-// :quickcopy --allow-narrow
-func NarrowCopy(dst *Destination, src *Source) {
-    dst.Name = src.Name
-    dst.Age = int8(src.Age) // 窄化转换 int 到 int8
-    dst.Birthday = src.Birthday.Format(time.RFC3339)
-    dst.ID = src.ID.String()
+// 源结构体
+type Source struct {
+    UserName string
+    Age      int
+}
+
+// 目标结构体
+type Destination struct {
+    username string  // 字段名大小写不同
+    Age      string
 }
 ```
+
+添加拷贝函数原型和注释标记：
+
+```go
+// :quickcopy --ignore-case
+func CopyToDestination(dst *Destination, src *Source) {
+}
+```
+运行
+```bash
+quickcopy
+```
+
+将生成如下拷贝函数：
+```go
+func CopyToDestination(dst *Destination, src *Source) {
+    dst.username = src.UserName  // 自动匹配不同大小写的字段
+    dst.Age = fmt.Sprint(src.Age)
+}
+```
+
+### `--field-mapping`
+例如：
+```go
+// 源结构体
+type Source struct {
+    FirstName string
+    LastName  string
+    UserID    int
+}
+
+// 目标结构体
+type Destination struct {
+    FullName string  // 需要合并 FirstName 和 LastName
+    ID       string  // 映射自 UserID
+}
+```
+
+添加拷贝函数原型和注释标记，并指定字段映射规则：
+
+```go
+// :quickcopy
+// FullName=FirstName
+// ID=UserID
+func CopyToDestination(dst *Destination, src *Source) {
+}
+```
+
+将生成如下拷贝函数：
+```go
+func CopyToDestination(dst *Destination, src *Source) {
+    dst.FullName = src.FirstName // 按照映射规则合并字段
+    dst.ID = fmt.Sprint(src.UserID)                    // 按照映射规则转换字段
+}
+```
+
+### `--single-to-slice`
+例如：
+```go
+// 源结构体
+type Source struct {
+    Tag    string   // 单个标签
+    Status int      // 单个状态
+    IDs    []int    // ID列表
+}
+
+// 目标结构体
+type Destination struct {
+    Tags    []string // 标签列表
+    Statuses []string // 状态列表
+    ID      int      // 单个ID
+}
+```
+
+添加拷贝函数原型和注释标记：
+
+```go
+// :quickcopy --single-to-slice
+func CopyToDestination(dst *Destination, src *Source) {
+}
+```
+
+将生成如下拷贝函数：
+```go
+func CopyToDestination(dst *Destination, src *Source) {
+    dst.Tags = []string{src.Tag}           // 单个字符串转换为字符串数组
+    dst.Statuses = []string{fmt.Sprint(src.Status)} // 单个int转换为字符串数组
+    if len(src.IDs) > 0 {
+        dst.ID = src.IDs[0]                // 从数组中提取第一个元素
+    }
+}
+```
+
+这个例子展示了三种常见的转换场景：
+1. 将单个字符串 `Tag` 转换为字符串数组 `Tags`
+2. 将单个整数 `Status` 转换为字符串数组 `Statuses`（包含类型转换）
+3. 从整数数组 `IDs` 中提取第一个元素赋值给单个整数 `ID`
 
 ## 支持的类型转换
 
