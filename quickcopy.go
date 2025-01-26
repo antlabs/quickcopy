@@ -279,8 +279,11 @@ func {{.FuncName}}({{.DstVar}} *{{.DstType}}, {{.SrcVar}} *{{.SrcType}}) {
 {{- end }}
 }`
 
-func addGeneratedFunction(fn *ast.FuncDecl) {
-	generatedFunctions.Store(fn.Name.Name, fn)
+func addGeneratedFunction(funcName string, fn *ast.FuncDecl) {
+	if _, loaded := generatedFunctions.LoadOrStore(funcName, fn); loaded {
+		panic(fmt.Sprintf("Function %s already generated", funcName))
+	}
+	generatedFunctions.Store(funcName, fn)
 }
 
 // parseFieldMappings 解析字段映射规则
@@ -359,18 +362,20 @@ func generateCompleteCopyFunc(funcDecl *ast.FuncDecl, srcVar, dstVar, srcType, d
 
 // writeFile 将修改后的 AST 写回文件
 func writeFile(fset *token.FileSet, file *ast.File, path string) {
+	var existingFuncs Map[string, int]
 	// 构建现有函数索引（名称 -> 声明位置）
-	existingFuncs := make(map[string]int)
 	for i, decl := range file.Decls {
 		if fn, ok := decl.(*ast.FuncDecl); ok {
-			existingFuncs[fn.Name.Name] = i
+			fmt.Printf("Found existing function: %s\n", fn.Name.Name)
+			existingFuncs.Store(fn.Name.Name, i)
 		}
 	}
 
 	// 合并生成的函数
 	generatedFunctions.Range(func(_ string, newFn *ast.FuncDecl) bool {
 		name := newFn.Name.Name
-		if idx, exists := existingFuncs[name]; exists {
+		log.Printf("Processing function: %s", name)
+		if idx, exists := existingFuncs.Load(name); exists {
 			// 替换已存在的函数声明
 			file.Decls[idx] = newFn
 		} else {
@@ -378,12 +383,6 @@ func writeFile(fset *token.FileSet, file *ast.File, path string) {
 			file.Decls = append(file.Decls, newFn)
 		}
 		return false
-	})
-
-	// 添加所有生成的函数到文件末尾
-	generatedFunctions.Range(func(_ string, fn *ast.FuncDecl) bool {
-		file.Decls = append(file.Decls, fn)
-		return true
 	})
 
 	// 清空注册表
@@ -782,10 +781,13 @@ func handleSliceConversion(srcType, dstType string, allowNarrow, singleToSlice b
 
 }
 
+// 修改 generateSliceCopyFunc 函数
 func generateSliceCopyFunc(srcElem, dstElem, elemConv string, file *ast.File) string {
-	// 检查是否已经生成过
 	funcName := getSliceCopyFuncName(srcElem, dstElem)
+
+	// 使用 LoadOrStore 确保并发安全
 	if _, loaded := generatedFunctions.Load(funcName); loaded {
+		log.Printf("Slice function %s already generated", funcName)
 		return funcName
 	}
 
@@ -832,7 +834,7 @@ func %s(src []%s) []%s {
 	}
 
 	if fn, ok := parsedFile.Decls[0].(*ast.FuncDecl); ok {
-		addGeneratedFunction(fn)
+		addGeneratedFunction(funcName, fn)
 		return funcName
 	}
 	return ""
