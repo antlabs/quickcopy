@@ -20,7 +20,9 @@ func QuickCopy3(dst *copy4, src *copy3) {
 		t, _ := time.Parse(time.RFC3339, s)
 		return t
 	}(src.T)
-} // :quickcopy
+}
+
+// :quickcopy
 
 func QuickCopy4(dst *copy3, src *copy4) {
 	dst.T = func(t time.Time) string {

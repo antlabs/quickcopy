@@ -699,7 +699,7 @@ func isBasicType(typeName string) bool {
 func isIntegerType(typeName string) bool {
 	switch typeName {
 	case "int", "int8", "int16", "int32", "int64",
-		"uint", "uint8", "uint16", "uint32", "uint64":
+		"uint", "uint8", "uint16", "uint32", "uint64", "float32", "float64":
 		return true
 	default:
 		return false
@@ -719,6 +719,10 @@ func getIntWidth(typeName string) int {
 		return 64
 	case "int", "uint":
 		// 假设 int 和 uint 是 64 位的
+		return 64
+	case "float32":
+		return 32
+	case "float64":
 		return 64
 	default:
 		return 0
@@ -759,7 +763,20 @@ func getTypeConversion(srcType, dstType string, allowNarrow, singleToSlice bool,
 	}
 
 	// 其他类型转换逻辑
+	return handleSpecialTypeConversion(srcType, dstType)
+}
+
+// TOOD 加unsafe开关
+func handleSpecialTypeConversion(srcType, dstType string) string {
 	switch {
+	case srcType == "string" && dstType == "float64":
+		return "func(s string) float64 { f, _ := strconv.ParseFloat(s, 64); return f }"
+	case srcType == "float64" && dstType == "string":
+		return "func(f float64) string { return strconv.FormatFloat(f, 'f', -1, 64) }"
+	case srcType == "string" && dstType == "[]byte":
+		return "func(s string) []byte { return []byte(s) }"
+	case srcType == "[]byte" && dstType == "string":
+		return "func(b []byte) string { return string(b) }"
 	case srcType == "int" && dstType == "string":
 		return "fmt.Sprint"
 	case srcType == "string" && dstType == "int":
@@ -928,18 +945,7 @@ func handleBasicConversion(src, dst string, allowNarrow bool) string {
 	}
 
 	// 其他基本类型转换
-	// TOOD 加unsafe开关
-	switch {
-	case src == "string" && dst == "[]byte":
-		return "[]byte"
-	case src == "[]byte" && dst == "string":
-		return "string"
-	case src == "int" && dst == "string":
-		return "fmt.Sprint"
-	case src == "string" && dst == "int":
-		return "strconv.Atoi" // 需要自定义函数
-	}
-	return ""
+	return handleSpecialTypeConversion(src, dst)
 }
 
 func generateElementConversion(srcVar, dstVar, conversion string) string {
