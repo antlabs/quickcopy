@@ -20,6 +20,8 @@ import (
 // 新增函数：注册生成的函数到AST
 var generatedFunctions Map[string, *ast.FuncDecl]
 
+var processedTopLevelTypes Map[string, bool]
+
 // FieldMapping 增加新字段
 type FieldMapping struct {
 	SrcField       string
@@ -214,6 +216,9 @@ func generateCopyFunctionIfNeeded(srcType, dstType string, file *ast.File) {
 	// }
 
 	key := srcType + "->" + dstType
+	if _, ok := processedTopLevelTypes.Load(key); ok {
+		return
+	}
 	// 防止死循环的。
 	if _, loaded := generatedStructPairs.LoadOrStore(key, true); loaded {
 		return
@@ -1107,6 +1112,8 @@ func Main(dir string) {
 				dstType := strings.TrimPrefix(types.ExprString(dstParam.Type), "*")
 
 				log.Printf("Source type: %s, Destination type: %s", srcType, dstType)
+
+				processedTopLevelTypes.Store(fmt.Sprintf("%s->%s", srcType, dstType), true)
 
 				// 提取字段映射关系
 				fields := getFieldMappings(srcType, dstType, file, ignoreCase, allowNarrow, singleToSlice, fieldMappings)
