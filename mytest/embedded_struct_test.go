@@ -34,18 +34,15 @@ func CopyToUserView(dst *UserView, src *UserSource) {
 
 	dst.Contact = src.Email
 	dst.ID = src.ID
-	copyTime_TimeFromTime_Time(dst.CreatedAt,
+	dst.CreatedAt = src.
+		CreatedAt
 
-		src.CreatedAt)
+	dst.
+		UpdatedAt = src.UpdatedAt
 
-	copyTime_TimeFromTime_Time(dst.UpdatedAt,
-		src.UpdatedAt,
-	)
-	dst.Name =
-		src.Name
-
-	dst.Age = fmt.Sprint(src.
-		Age)
+	dst.Name = src.Name
+	dst.Age = fmt.
+		Sprint(src.Age)
 }
 
 func TestEmbeddedStructCopy(t *testing.T) {

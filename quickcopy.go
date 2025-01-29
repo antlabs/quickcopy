@@ -862,6 +862,9 @@ func %s(src []%s) []%s {
 
 // isStructType 判断给定类型是否为结构体类型（包含指针类型和跨包类型）
 func isStructType(typeName string, file *ast.File) bool {
+	if typeName == "time.Time" {
+		return false
+	}
 	// 快速跳过基本类型和复合类型
 	if isBasicType(typeName) || isSliceOrArray(typeName) || isPointerType(typeName) {
 		return false
