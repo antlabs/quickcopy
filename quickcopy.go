@@ -19,7 +19,6 @@ import (
 
 // 新增函数：注册生成的函数到AST
 var generatedFunctions Map[string, *ast.FuncDecl]
-var generatedStructPairs Map[string, bool]
 
 // FieldMapping 增加新字段
 type FieldMapping struct {
@@ -206,19 +205,21 @@ func isExternalType(typeName string, file *ast.File) bool {
 	return false
 }
 
+var generatedStructPairs Map[string, bool]
+
 func generateCopyFunctionIfNeeded(srcType, dstType string, file *ast.File) {
-	// 同步检查结构体对
+	// 增强过滤条件：只有当类型不同时才生成函数
+	// if srcType == dstType {
+	// 	return
+	// }
+
 	key := srcType + "->" + dstType
+	// 防止死循环的。
 	if _, loaded := generatedStructPairs.LoadOrStore(key, true); loaded {
 		return
 	}
-	// 增强过滤条件：只有当类型不同时才生成函数
-	if srcType == dstType {
-		return
-	}
-
-	// 新增：跳过非结构体类型
-	if !isStructType(srcType, file) || !isStructType(dstType, file) {
+	funcName := getStructCopyFuncName(srcType, dstType)
+	if _, ok := generatedFunctions.Load(funcName); ok {
 		return
 	}
 
@@ -226,9 +227,15 @@ func generateCopyFunctionIfNeeded(srcType, dstType string, file *ast.File) {
 	if isBasicType(srcType) || isBasicType(dstType) {
 		return
 	}
+
 	if isExternalType(srcType, file) || isExternalType(dstType, file) {
 		return
 	}
+
+	// // 新增：跳过非结构体类型
+	// if !isStructType(srcType, file) || !isStructType(dstType, file) {
+	// 	return
+	// }
 
 	srcStruct := findStructDef(srcType, file)
 	dstStruct := findStructDef(dstType, file)
@@ -236,14 +243,13 @@ func generateCopyFunctionIfNeeded(srcType, dstType string, file *ast.File) {
 		return
 	}
 
-	// 递归处理所有嵌套类型（修改部分）
+	// 递归处理所有嵌套类型
 	processNestedTypes(srcStruct, file)
 	processNestedTypes(dstStruct, file)
 
 	fields := getFieldMappings(srcType, dstType, file, false, false, false, nil)
-	funcName := getStructCopyFuncName(srcType, dstType)
 
-	generateCompleteCopyFunc(&ast.FuncDecl{
+	funcDecl := &ast.FuncDecl{
 		Name: ast.NewIdent(funcName),
 		Type: &ast.FuncType{
 			Params: &ast.FieldList{
@@ -253,7 +259,10 @@ func generateCopyFunctionIfNeeded(srcType, dstType string, file *ast.File) {
 				},
 			},
 		},
-	}, "src", "dst", srcType, dstType, fields)
+	}
+	generateCompleteCopyFunc(funcDecl, "src", "dst", srcType, dstType, fields)
+	// 注册生成的函数
+	generatedFunctions.Store(funcName, funcDecl)
 }
 
 const copyFuncTemplate = `// {{.FuncName}} 是一个自动生成的拷贝函数
@@ -782,8 +791,15 @@ func handleSliceConversion(srcType, dstType string, allowNarrow, singleToSlice b
 
 // 修改 generateSliceCopyFunc 函数
 func generateSliceCopyFunc(srcElem, dstElem, elemConv string, file *ast.File) string {
+	// 强制生成元素类型的转换函数
+	generateCopyFunctionIfNeeded(srcElem, dstElem, file)
+
 	funcName := getSliceCopyFuncName(srcElem, dstElem)
 
+	// 如果元素类型相同，直接返回浅拷贝
+	if srcElem == dstElem {
+		return fmt.Sprintf("func(src []%s) []%s { return append([]%s(nil), src...) }", srcElem, dstElem, dstElem)
+	}
 	// 使用 LoadOrStore 确保并发安全
 	if _, loaded := generatedFunctions.Load(funcName); loaded {
 		log.Printf("Slice function %s already generated", funcName)
@@ -953,9 +969,9 @@ func sanitizeTypeName(typeName string) string {
 }
 
 func getStructCopyFuncName(src, dst string) string {
-	if src == dst {
-		return "" // 相同类型不需要转换函数
-	}
+	// if src == dst {
+	// 	return "" // 相同类型不需要转换函数
+	// }
 	srcClean := sanitizeTypeName(src)
 	dstClean := sanitizeTypeName(dst)
 	return fmt.Sprintf("copy%sFrom%s", dstClean, srcClean)

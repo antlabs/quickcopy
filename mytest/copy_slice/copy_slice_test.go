@@ -367,5 +367,4 @@ func TestDiffTypeSliceCopy(t *testing.T) {
 
 // :quickcopy
 func DiffTypeSliceCopy(dst *DestCompany, src *SourceCompany) {
-
 }
