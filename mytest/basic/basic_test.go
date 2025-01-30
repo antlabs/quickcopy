@@ -7,22 +7,20 @@ import (
 
 // :quickcopy
 func stringIntSlice(dst *[]string, src *[]int) {
-	*dst =
-		copySliceStringFromSliceInt(// :quickcopy
-		*src)
+	* // :quickcopy
+	dst = copySliceStringFromSliceInt(*src)
 }
-
 func intStringSlice(dst *[]int, src *[]string) {
 	*dst =
 		copySliceIntFromSliceString(*src)
 }
 
 func copySliceStringFromSliceInt(src []int) []string {
-
 	if src == nil {
 		return nil
 	}
-	dst := make([]string, len(src))
+	dst :=
+		make([]string, len(src))
 	for i := range src {
 		dst[i] = fmt.Sprint(src[i])
 
@@ -45,5 +43,5 @@ func copySliceIntFromSliceString(src []string) []int {
 		}(
 			src[i])
 	}
-	return dst // :quickcopy
+	return dst	// :quickcopy
 }
