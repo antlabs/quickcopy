@@ -1,5 +1,7 @@
 package quickcopy
 
+import "strings"
+
 func isBasicType(typeName string) bool {
 	switch typeName {
 	case "string", "int", "int8", "int16", "int32", "int64",
@@ -69,4 +71,23 @@ func handleSpecialTypeConversion(srcType, dstType string) string {
 		return "func(s string) uuid.UUID { u, _ := uuid.Parse(s); return u }"
 	}
 	return ""
+}
+
+func isSliceOrArray(t string) bool {
+	return strings.Contains(t, "[") || strings.HasPrefix(t, "[]")
+}
+
+// getElementType 获取容器类型的元素类型
+func getElementType(containerType string) string {
+	// 处理数组类型（如 [3]int → int）
+	if strings.Contains(containerType, "]") {
+		return containerType[strings.Index(containerType, "]")+1:]
+	}
+
+	// 处理切片类型（如 []int → int）
+	if strings.HasPrefix(containerType, "[]") {
+		return strings.TrimPrefix(containerType, "[]")
+	}
+
+	return containerType
 }

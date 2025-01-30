@@ -279,7 +279,7 @@ func {{.FuncName}}({{.DstVar}} *{{.DstType}}, {{.SrcVar}} *{{.SrcType}}) {
 {{- range .Fields }}
 {{- if .IsSlice }}
     // 处理切片字段 {{.DstField}}
-	{{.Conversion}}({{$.DstVar}}, {{$.SrcVar}})
+	*{{$.DstVar}} = {{.Conversion}}(*{{$.SrcVar}})
 {{- else if .IsEmbedded }}
     // 处理嵌入字段 {{.DstField}}
     {{if .ConversionFunc -}}
@@ -371,6 +371,7 @@ func generateCompleteCopyFunc(funcDecl *ast.FuncDecl, srcVar, dstVar, srcType, d
 	// 将原始函数的注释附加到新生成的函数上
 	if funcDecl.Doc != nil {
 		newFuncDecl.Doc = funcDecl.Doc
+		fmt.Printf("Attached doc to new function: %s, comment: %s\n", newFuncDecl.Name.Name, funcDecl.Doc.Text())
 	}
 
 	funcDecl.Body = newFuncDecl.Body
@@ -414,7 +415,8 @@ func writeFile(fset *token.FileSet, file *ast.File, path string) {
 	// 格式化整个文件
 	var buf bytes.Buffer
 
-	cfg := &printer.Config{Mode: printer.UseSpaces | printer.TabIndent, Tabwidth: 8}
+	// cfg := &printer.Config{}
+	cfg := &printer.Config{Mode: printer.TabIndent, Tabwidth: 8}
 	cfg.Fprint(&buf, fset, file)
 	// 将格式化后的内容写入文件
 	_, err = outputFile.Write(buf.Bytes())
@@ -432,11 +434,12 @@ func getFieldMappings(srcType, dstType string, file *ast.File, ignoreCase, allow
 		dstElem := getElementType(dstType)
 		conversion := getTypeConversion(srcElem, dstElem, allowNarrow, singleToSlice, file, path)
 		if conversion != "" {
+			sliceConv := generateSliceCopyFunc(srcElem, dstElem, conversion, file, path)
 			return []FieldMapping{
 				{
 					SrcField:   "",
 					DstField:   "",
-					Conversion: getSliceCopyFuncName(srcElem, dstElem),
+					Conversion: sliceConv,
 					IsSlice:    true,
 				},
 			}
@@ -580,21 +583,8 @@ func getTypeConversion(srcType, dstType string, allowNarrow, singleToSlice bool,
 	}
 
 	if isSliceOrArray(srcType) && isSliceOrArray(dstType) {
-		// srcElem := getElementType(srcType)
-		// dstElem := getElementType(dstType)
-		// elemConv := getTypeConversion(srcElem, dstElem, allowNarrow, singleToSlice, file)
-		// if elemConv != "" {
-		// 	return getSliceCopyFuncName(srcElem, dstElem)
-		// }
-		// return ""
-
 		return handleSliceConversion(srcType, dstType, allowNarrow, singleToSlice, file, path)
 	}
-	// // 处理切片转换
-	// if isSliceOrArray(srcType) && isSliceOrArray(dstType) {
-	// 	return handleSliceConversion(srcType, dstType, allowNarrow, singleToSlice, file)
-	// }
-
 	// 处理基本类型转换
 	if isBasicType(srcType) && isBasicType(dstType) {
 		return handleBasicConversion(srcType, dstType, allowNarrow)
@@ -611,178 +601,6 @@ func getTypeConversion(srcType, dstType string, allowNarrow, singleToSlice bool,
 
 	// 其他类型转换逻辑
 	return handleSpecialTypeConversion(srcType, dstType)
-}
-
-func generateBasicSliceCopyFunc(srcElem, dstElem string) string {
-	funcName := getSliceCopyFuncName(srcElem, dstElem)
-
-	// 如果元素类型相同，直接返回浅拷贝
-	if srcElem == dstElem {
-		return fmt.Sprintf("func(src []%s) []%s { return append([]%s(nil), src...) }", srcElem, dstElem, dstElem)
-	}
-
-	// 使用 LoadOrStore 确保并发安全
-	if _, loaded := generatedFunctions.Load(funcName); loaded {
-		log.Printf("Slice function %s already generated", funcName)
-		return funcName
-	}
-
-	// 生成基本类型之间的转换函数
-	code := fmt.Sprintf(`
-    package main
-    // %s 是自动生成的切片拷贝函数
-    func %s(src []%s) []%s {
-        if src == nil {
-            return nil
-        }
-        dst := make([]%s, len(src))
-        for i := range src {
-            dst[i] = %s(src[i])
-        }
-        return dst
-    }`, funcName, funcName, srcElem, dstElem, dstElem, handleBasicConversion(srcElem, dstElem, true))
-
-	// 安全解析生成的代码
-	fset := token.NewFileSet()
-	parsedFile, err := parser.ParseFile(fset, "", code, parser.ParseComments)
-	if err != nil {
-		log.Printf("Failed to parse generated slice function: %v", err)
-		return ""
-	}
-
-	if len(parsedFile.Decls) == 0 {
-		log.Printf("Generated slice function is empty")
-		return ""
-	}
-
-	if fn, ok := parsedFile.Decls[0].(*ast.FuncDecl); ok {
-		addGeneratedFunction(funcName, fn)
-		return funcName
-	}
-	return ""
-}
-
-func handleSliceConversion(srcType, dstType string, allowNarrow, singleToSlice bool, file *ast.File, path string) string {
-
-	srcElem := getElementType(srcType)
-	dstElem := getElementType(dstType)
-
-	if isBasicType(srcElem) && isBasicType(dstElem) {
-		return generateBasicSliceCopyFunc(srcElem, dstElem)
-	}
-
-	// 生成元素转换函数
-	elemConv := getStructCopyFuncName(srcElem, dstElem)
-	generateCopyFunctionIfNeeded(srcElem, dstElem, file, path)
-
-	// 只有当元素类型需要转换时才生成切片函数
-	if elemConv != "" {
-		log.Printf("Generating slice conversion function for %s to %s, funcName: %s", srcType, dstType, elemConv)
-		return generateSliceCopyFunc(srcElem, dstElem, elemConv, file, path)
-	}
-	return "" // 直接赋值
-
-}
-
-// 修改 generateSliceCopyFunc 函数
-func generateSliceCopyFunc(srcElem, dstElem, elemConv string, file *ast.File, path string) string {
-	// 基本类型直接转换
-	if isBasicType(srcElem) && isBasicType(dstElem) {
-		funcName := getSliceCopyFuncName(srcElem, dstElem)
-		if _, loaded := generatedFunctions.Load(funcName); loaded {
-			return funcName
-		}
-
-		// 生成处理指针切片的代码
-		code := fmt.Sprintf(`
-        package main
-        func %s(dst *[]%s, src *[]%s) {
-            if src == nil {
-                *dst = nil
-                return
-            }
-            *dst = make([]%s, len(*src))
-            for i := range *src {
-                (*dst)[i] = %s((*src)[i])
-            }
-        }`, funcName, dstElem, srcElem, dstElem, handleBasicConversion(srcElem, dstElem, true))
-		// 解析并注册生成的函数
-		fset := token.NewFileSet()
-		parsedFile, err := parser.ParseFile(fset, "", code, parser.ParseComments)
-		if err != nil {
-			log.Printf("Failed to parse slice function: %v", err)
-			return ""
-		}
-
-		if fn, ok := parsedFile.Decls[0].(*ast.FuncDecl); ok {
-			generatedFunctions.Store(funcName, fn)
-			return funcName
-		}
-		return ""
-	}
-
-	// 强制生成元素类型的转换函数
-	generateCopyFunctionIfNeeded(srcElem, dstElem, file, path)
-
-	funcName := getSliceCopyFuncName(srcElem, dstElem)
-
-	// 如果元素类型相同，直接返回浅拷贝
-	if srcElem == dstElem {
-		return fmt.Sprintf("func(src []%s) []%s { return append([]%s(nil), src...) }", srcElem, dstElem, dstElem)
-	}
-	// 使用 LoadOrStore 确保并发安全
-	if _, loaded := generatedFunctions.Load(funcName); loaded {
-		log.Printf("Slice function %s already generated", funcName)
-		return funcName
-	}
-
-	// 处理file为nil的情况
-	srcIsStruct := file != nil && isStructType(srcElem, file, path)
-	dstIsStruct := file != nil && isStructType(dstElem, file, path)
-
-	// 如果源和目标元素都不是结构体，生成直接拷贝函数
-	if !srcIsStruct && !dstIsStruct {
-		return fmt.Sprintf("func(src []%s) []%s { return src }", srcElem, dstElem)
-	}
-
-	// 需要转换函数时，确保elemConv非空
-	if elemConv == "" {
-		log.Printf("elemConv is required for struct elements but is empty")
-		return ""
-	}
-
-	code := fmt.Sprintf(`
-	package main
-// %s 是自动生成的切片拷贝函数
-func %s(src []%s) []%s {
-	if src == nil {
-		return nil
-	}
-	dst := make([]%s, len(src))
-	for i := range src {
-		%s(&dst[i], &src[i])
-	}
-	return dst
-}`, funcName, funcName, srcElem, dstElem, dstElem, elemConv)
-
-	// 安全解析生成的代码
-	fset := token.NewFileSet()
-	parsedFile, err := parser.ParseFile(fset, "", code, parser.ParseComments)
-	if err != nil {
-		log.Printf("Failed to parse generated slice function: %v", err)
-		return ""
-	}
-
-	if len(parsedFile.Decls) == 0 {
-		log.Printf("Generated slice function is empty")
-		return ""
-	}
-
-	if fn, ok := parsedFile.Decls[0].(*ast.FuncDecl); ok {
-		addGeneratedFunction(funcName, fn)
-		return funcName
-	}
-	return ""
 }
 
 // isStructType 判断给定类型是否为结构体类型（包含指针类型和跨包类型）
@@ -868,25 +686,6 @@ func getStructCopyFuncName(src, dst string) string {
 	srcClean := sanitizeTypeName(src)
 	dstClean := sanitizeTypeName(dst)
 	return fmt.Sprintf("copy%sFrom%s", dstClean, srcClean)
-}
-
-func isSliceOrArray(t string) bool {
-	return strings.Contains(t, "[") || strings.HasPrefix(t, "[]")
-}
-
-// getElementType 获取容器类型的元素类型
-func getElementType(containerType string) string {
-	// 处理数组类型（如 [3]int → int）
-	if strings.Contains(containerType, "]") {
-		return containerType[strings.Index(containerType, "]")+1:]
-	}
-
-	// 处理切片类型（如 []int → int）
-	if strings.HasPrefix(containerType, "[]") {
-		return strings.TrimPrefix(containerType, "[]")
-	}
-
-	return containerType
 }
 
 func generateStructConversionFunc(src, dst string) string {
@@ -1020,26 +819,4 @@ func Main(dir string) {
 	if err != nil {
 		log.Fatalf("Failed to walk directory: %v", err)
 	}
-}
-
-// findTypeSpec 在文件中查找类型声明
-func findTypeSpec(typeName string, file *ast.File, path string) *ast.TypeSpec {
-	for _, decl := range file.Decls {
-		genDecl, ok := decl.(*ast.GenDecl)
-		if !ok || genDecl.Tok != token.TYPE {
-			continue
-		}
-
-		for _, spec := range genDecl.Specs {
-			typeSpec, ok := spec.(*ast.TypeSpec)
-			if !ok {
-				continue
-			}
-
-			if typeSpec.Name.Name == typeName {
-				return typeSpec
-			}
-		}
-	}
-	return nil
 }

@@ -290,3 +290,7 @@ func CopyToDestination(dst *Destination, src *Source) {
 - 确保所有依赖项已正确安装。
 - 验证 Go 环境设置是否正确。
 - 参考 GitHub 问题页面以获取已知问题和解决方案。
+
+## 已知问题
+在函数填充时，函数的实现和函数开头的注释可能位置可能不会靠在一起。这是由于标准库ast包的问题导致的
+具体可看 https://github.com/golang/go/issues/20744

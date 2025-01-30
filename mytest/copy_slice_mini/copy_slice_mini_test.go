@@ -4,16 +4,16 @@ import "testing"
 
 // SourceItem 是源结构体
 type SourceItem struct {
-	ID    int
-	Name  string
-	Value float64
+	ID	int
+	Name	string
+	Value	float64
 }
 
 // DestItem 是目标结构体，与 SourceItem 相似但不完全相同
 type DestItem struct {
-	ID     int64 // 类型不同
-	Name   string
-	Amount float64 // 字段名不同
+	ID	int64	// 类型不同
+	Name	string
+	Amount	float64	// 字段名不同
 }
 
 // SourceContainer 包含 SourceItem 切片的结构体
@@ -65,14 +65,15 @@ func copyDestItemFromSourceItem(dst *DestItem, src *SourceItem) {
 	dst.Name = src.Name
 }
 
-func copySliceDestItemFromSliceSourceItem(src []SourceItem) []DestItem {
+func copySliceDestItemFromSliceSourceItem(
+	src []SourceItem) []DestItem {
 	if src == nil {
 		return nil
 	}
-	dst := make([]DestItem, len(src))
+	dst := make([]DestItem, len(src),
+	)
 	for i := range src {
 		copyDestItemFromSourceItem(&dst[i], &src[i])
 	}
 	return dst
-
 }

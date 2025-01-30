@@ -35,19 +35,19 @@ func CopyToTarget2(dst *SourceStruct, src *TargetStruct) {
 
 func TestCopyToTarget(t *testing.T) {
 	tests := []struct {
-		name   string
-		srcID  uuid.UUID
-		wantID string
+		name	string
+		srcID	uuid.UUID
+		wantID	string
 	}{
 		{
-			name:   "normal uuid",
-			srcID:  uuid.MustParse("6ba7b810-9dad-11d1-80b4-00c04fd430c8"),
-			wantID: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+			name:	"normal uuid",
+			srcID:	uuid.MustParse("6ba7b810-9dad-11d1-80b4-00c04fd430c8"),
+			wantID:	"6ba7b810-9dad-11d1-80b4-00c04fd430c8",
 		},
 		{
-			name:   "zero uuid",
-			srcID:  uuid.Nil,
-			wantID: "00000000-0000-0000-0000-000000000000",
+			name:	"zero uuid",
+			srcID:	uuid.Nil,
+			wantID:	"00000000-0000-0000-0000-000000000000",
 		},
 	}
 
@@ -69,28 +69,28 @@ func TestCopyToTarget(t *testing.T) {
 
 func TestCopyToTarget2(t *testing.T) {
 	tests := []struct {
-		name    string
-		srcID   string
-		wantID  uuid.UUID
-		wantErr bool
+		name	string
+		srcID	string
+		wantID	uuid.UUID
+		wantErr	bool
 	}{
 		{
-			name:    "normal uuid string",
-			srcID:   "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
-			wantID:  uuid.MustParse("6ba7b810-9dad-11d1-80b4-00c04fd430c8"),
-			wantErr: false,
+			name:		"normal uuid string",
+			srcID:		"6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+			wantID:		uuid.MustParse("6ba7b810-9dad-11d1-80b4-00c04fd430c8"),
+			wantErr:	false,
 		},
 		{
-			name:    "empty string",
-			srcID:   "",
-			wantID:  uuid.Nil,
-			wantErr: false,
+			name:		"empty string",
+			srcID:		"",
+			wantID:		uuid.Nil,
+			wantErr:	false,
 		},
 		{
-			name:    "invalid uuid string",
-			srcID:   "invalid-uuid",
-			wantID:  uuid.Nil,
-			wantErr: true,
+			name:		"invalid uuid string",
+			srcID:		"invalid-uuid",
+			wantID:		uuid.Nil,
+			wantErr:	true,
 		},
 	}
 

@@ -10,10 +10,17 @@ func CompanySliceCopy(dst *CompanyDest, src *Company) {// :quickcopy
 
 	dst.Departments = src.Departments
 
-	dst.HeadOffice = src.HeadOffice
-
+	dst.HeadOffice =
+		src.HeadOffice
 }
-func SliceCopy(dst *SliceDestination, src *SliceSource) {}
+func SliceCopy(dst *SliceDestination, src *SliceSource) {
+	dst.
+		Numbers = src.Numbers
+	dst.Names = src.Names
+	dst.Addresses = src.Addresses
+	dst.Matrix = src.Matrix
+	dst.Contacts = src.Contacts
+}
 
 func DiffTypeSliceCopy(dst *DestCompany, src *SourceCompany) {
 
@@ -22,24 +29,6 @@ func DiffTypeSliceCopy(dst *DestCompany, src *SourceCompany) {
 	dst.Departments = copySliceDestDepartmentFromSliceSourceDepartment(src.Departments)
 	dst.HeadOffice = src.HeadOffice
 	dst.YearFounded = src.YearFounded
-}
-func copyDestDepartmentFromSourceDepartment(dst *DestDepartment, src *SourceDepartment) {
-	dst.DeptName = src.DeptName
-	dst.Location = src.Location
-	dst.Employees = copySliceDestPersonFromSliceSourcePerson(src.Employees)
-	dst.Budget = src.Budget
-	dst.HeadCount = src.HeadCount
-}
-
-func copySliceDestDepartmentFromSliceSourceDepartment(src []SourceDepartment) []DestDepartment {
-	if src == nil {
-		return nil
-	}
-	dst := make([]DestDepartment, len(src))
-	for i := range src {
-		copyDestDepartmentFromSourceDepartment(&dst[i], &src[i])
-	}
-	return dst
 }
 func copySourcePersonFromSourcePerson(dst *SourcePerson, src *SourcePerson) {
 
@@ -51,7 +40,8 @@ func copySourcePersonFromSourcePerson(dst *SourcePerson, src *SourcePerson) {
 func copyDestPersonFromDestPerson(dst *DestPerson, src *DestPerson) {
 
 	dst.Name = src.Name
-	dst.Age = src.Age
+	dst.
+		Age = src.Age
 	dst.Department = src.Department
 	dst.Skills = src.Skills
 }
@@ -70,6 +60,24 @@ func copySliceDestPersonFromSliceSourcePerson(src []SourcePerson) []DestPerson {
 	dst := make([]DestPerson, len(src))
 	for i := range src {
 		copyDestPersonFromSourcePerson(&dst[i], &src[i])
+	}
+	return dst
+}
+func copyDestDepartmentFromSourceDepartment(dst *DestDepartment, src *SourceDepartment) {
+	dst.DeptName = src.DeptName
+	dst.Location = src.Location
+	dst.Employees = copySliceDestPersonFromSliceSourcePerson(src.Employees)
+	dst.Budget = src.Budget
+	dst.HeadCount = src.HeadCount
+}
+
+func copySliceDestDepartmentFromSliceSourceDepartment(src []SourceDepartment) []DestDepartment {
+	if src == nil {
+		return nil
+	}
+	dst := make([]DestDepartment, len(src))
+	for i := range src {
+		copyDestDepartmentFromSourceDepartment(&dst[i], &src[i])
 	}
 	return dst
 }

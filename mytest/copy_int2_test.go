@@ -5,37 +5,37 @@ import (
 )
 
 type copyint2Src struct {
-	A int8
-	B int16
-	C int32
-	D int64
+	A	int8
+	B	int16
+	C	int32
+	D	int64
 }
 
 type copyint2Dst struct {
-	A int
-	B int
-	C int
-	D int
+	A	int
+	B	int
+	C	int
+	D	int
 }
 type copyint3Dst struct {
-	A int64
-	B int64
-	C int64
-	D int64
+	A	int64
+	B	int64
+	C	int64
+	D	int64
 }
 
 type copyint4Dst struct {
-	A int8
-	B int16
-	C int32
-	D int64
+	A	int8
+	B	int16
+	C	int32
+	D	int64
 }
 
 type copyint5src struct {
-	A int
-	B int
-	C int
-	D int
+	A	int
+	B	int
+	C	int
+	D	int
 }
 
 // :quickcopy

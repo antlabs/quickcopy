@@ -4,25 +4,25 @@ import "testing"
 
 // Source struct with fields in one case
 type CaseSource struct {
-	Username    string
-	UserAge     int
-	UserAddress string
+	Username	string
+	UserAge		int
+	UserAddress	string
 }
 
 // Destination struct with fields in different case
 type CaseDestination struct {
-	username    string
-	userage     int
-	useraddress string
+	username	string
+	userage		int
+	useraddress	string
 }
 
 // Test case-insensitive field mapping
 // :quickcopy --ignore-case
 func CaseCopy(dst *CaseDestination, src *CaseSource) {
 
-	dst.
-		username = src.Username
-	dst.userage = src.UserAge
+	dst.username = src.Username
+	dst.userage =
+		src.UserAge
 
 	dst.useraddress = src.UserAddress
 }
@@ -42,15 +42,14 @@ type RuleDestination struct {
 // :quickcopy UserAge = Age
 func RuleCopy(dst *RuleDestination, src *RuleSource) {
 
-	dst.
-		UserAge = src.Age
+	dst.UserAge = src.Age
 }
 
 // 测试忽略大小写的字段映射
 func TestCopyCaseTest(t *testing.T) {
 	src := &CaseSource{
-		Username: "张三",
-		UserAge:  25,
+		Username:	"张三",
+		UserAge:	25,
 	}
 	dst := &CaseDestination{}
 

@@ -6,34 +6,37 @@ import (
 )
 
 type FloatSource struct {
-	F32 float32
-	F64 float64
-	Str string
+	F32	float32
+	F64	float64
+	Str	string
 }
 
 type FloatDest struct {
-	F32 float64 // float32 -> float64
-	F64 float32 // float64 -> float32
-	Str float64 // string -> float64
+	F32	float64	// float32 -> float64
+	F64	float32	// float64 -> float32
+	Str	float64	// string -> float64
 }
 
 // :quickcopy --allow-narrow
 func CopyFloat(dst *FloatDest, src *FloatSource) {
+
 	dst.F32 = float64(src.F32)
+
 	dst.F64 = float32(src.F64)
 
 	dst.Str = func(s string) float64 {
-		f, _ := strconv.
-			ParseFloat(s, 64)
+		f, _ := strconv.ParseFloat(s, 64)
 		return f
-	}(src.Str)
+	}(src.
+		Str,
+	)
 }
 
 func TestFloatCopy(t *testing.T) {
 	src := &FloatSource{
-		F32: 3.14159,
-		F64: 2.71828,
-		Str: "123.456",
+		F32:	3.14159,
+		F64:	2.71828,
+		Str:	"123.456",
 	}
 
 	dst := &FloatDest{}

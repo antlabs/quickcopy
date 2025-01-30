@@ -8,53 +8,54 @@ import (
 
 // 基础用户信息
 type UserBase struct {
-	ID        int
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID		int
+	CreatedAt	time.Time
+	UpdatedAt	time.Time
 }
 
 // 源结构体：完整的用户信息
 type UserSource struct {
-	UserBase // 嵌入基础用户信息
-	Name     string
-	Age      int
-	Email    string
+	UserBase	// 嵌入基础用户信息
+	Name		string
+	Age		int
+	Email		string
 }
 
 // 目标结构体：用户视图
 type UserView struct {
-	UserBase // 嵌入基础用户信息
-	Name     string
-	Age      string // 类型转换：int -> string
-	Contact  string // 映射自 Email
+	UserBase	// 嵌入基础用户信息
+	Name		string
+	Age		string	// 类型转换：int -> string
+	Contact		string	// 映射自 Email
 }
 
 // :quickcopy Contact=Email
 func CopyToUserView(dst *UserView, src *UserSource) {
 
 	dst.Contact = src.Email
-	dst.ID = src.ID
-	dst.CreatedAt = src.
-		CreatedAt
 
-	dst.
-		UpdatedAt = src.UpdatedAt
+	dst.ID = src.ID
+
+	dst.CreatedAt = src.CreatedAt
+
+	dst.UpdatedAt = src.UpdatedAt
 
 	dst.Name = src.Name
-	dst.Age = fmt.
-		Sprint(src.Age)
+	dst.Age = fmt.Sprint(src.
+		Age,
+	)
 }
 
 func TestEmbeddedStructCopy(t *testing.T) {
 	src := &UserSource{
 		UserBase: UserBase{
-			ID:        1,
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
+			ID:		1,
+			CreatedAt:	time.Now(),
+			UpdatedAt:	time.Now(),
 		},
-		Name:  "张三",
-		Age:   25,
-		Email: "zhangsan@example.com",
+		Name:	"张三",
+		Age:	25,
+		Email:	"zhangsan@example.com",
 	}
 
 	dst := &UserView{}
