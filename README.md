@@ -46,7 +46,7 @@
 ### 方式1：直接安装
 
 ```bash
-go get github.com/antlabs/quickcopy/cmd/quickcopy
+go install github.com/antlabs/quickcopy/cmd/quickcopy@latest
 ```
 
 ### 方式2：从源码编译
