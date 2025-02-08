@@ -43,5 +43,5 @@ func copySliceIntFromSliceString(src []string) []int {
 		}(
 			src[i])
 	}
-	return dst	// :quickcopy
+	return dst // :quickcopy
 }

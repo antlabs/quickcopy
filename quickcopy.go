@@ -30,6 +30,7 @@ type FieldMapping struct {
 	ConversionFunc string
 	SrcElemType    string // 新增
 	DstElemType    string // 新增
+	ImportPath     string // 依赖的包
 }
 
 // CopyFuncInfo 存储拷贝函数信息
@@ -127,7 +128,7 @@ func processFields(
 			// 处理类型转换
 			srcType := types.ExprString(srcField.Type)
 			dstType := types.ExprString(field.Type)
-			conversion := getTypeConversion(srcType, dstType, allowNarrow, singleToSlice, file, path)
+			conversion, importPath := getTypeConversion(srcType, dstType, allowNarrow, singleToSlice, file, path)
 
 			// 判断是否为嵌入字段
 			isEmbedded := false
@@ -147,6 +148,7 @@ func processFields(
 				ConversionFunc: getStructCopyFuncName(srcType, dstType),
 				SrcElemType:    getElementType(srcType),
 				DstElemType:    getElementType(dstType),
+				ImportPath:     importPath,
 			})
 
 			if !isSrc {
@@ -271,6 +273,13 @@ func generateCopyFunctionIfNeeded(srcType, dstType string, file *ast.File, path 
 	}
 	generateCompleteCopyFunc(funcDecl, "src", "dst", srcType, dstType, fields)
 	// 注册生成的函数
+	importPath := []string{}
+	for _, field := range fields {
+		if field.ImportPath != "" {
+			importPath = append(importPath, field.ImportPath)
+		}
+	}
+	addRequiredImports(file, importPath...)
 	generatedFunctions.Store(funcName, funcDecl)
 }
 
@@ -432,15 +441,16 @@ func getFieldMappings(srcType, dstType string, file *ast.File, ignoreCase, allow
 	if isSliceOrArray(srcType) && isSliceOrArray(dstType) {
 		srcElem := getElementType(srcType)
 		dstElem := getElementType(dstType)
-		conversion := getTypeConversion(srcElem, dstElem, allowNarrow, singleToSlice, file, path)
+		conversion, _ := getTypeConversion(srcElem, dstElem, allowNarrow, singleToSlice, file, path)
 		if conversion != "" {
-			sliceConv := generateSliceCopyFunc(srcElem, dstElem, conversion, file, path)
+			sliceConv, sliceImportPath := generateSliceCopyFunc(srcElem, dstElem, conversion, file, path)
 			return []FieldMapping{
 				{
 					SrcField:   "",
 					DstField:   "",
 					Conversion: sliceConv,
 					IsSlice:    true,
+					ImportPath: sliceImportPath,
 				},
 			}
 		}
@@ -484,7 +494,7 @@ func getFieldMappings(srcType, dstType string, file *ast.File, ignoreCase, allow
 		}
 
 		// 获取类型转换逻辑
-		conversion := getTypeConversion(types.ExprString(srcField.Type), types.ExprString(dstField.Type), allowNarrow, singleToSlice, file, path)
+		conversion, importPath := getTypeConversion(types.ExprString(srcField.Type), types.ExprString(dstField.Type), allowNarrow, singleToSlice, file, path)
 
 		// 判断是否为嵌入字段
 		isEmbedded := isEmbeddedField(srcField) || isEmbeddedField(dstField)
@@ -495,6 +505,7 @@ func getFieldMappings(srcType, dstType string, file *ast.File, ignoreCase, allow
 			Conversion:     conversion,
 			IsEmbedded:     isEmbedded,
 			ConversionFunc: getStructCopyFuncName(srcType, dstType),
+			ImportPath:     importPath,
 		})
 		log.Printf("Mapped field: %s -> %s (Conversion: %s)", srcFieldPath, dstFieldPath, conversion)
 
@@ -576,10 +587,10 @@ func getSliceCopyFuncName(srcElem, dstElem string) string {
 }
 
 // 修改 getTypeConversion 函数签名，增加 file 参数
-func getTypeConversion(srcType, dstType string, allowNarrow, singleToSlice bool, file *ast.File, path string) string {
+func getTypeConversion(srcType, dstType string, allowNarrow, singleToSlice bool, file *ast.File, path string) (string, string) {
 	// 类型相同无需转换
 	if srcType == dstType {
-		return ""
+		return "", ""
 	}
 
 	if isSliceOrArray(srcType) && isSliceOrArray(dstType) {
@@ -591,7 +602,7 @@ func getTypeConversion(srcType, dstType string, allowNarrow, singleToSlice bool,
 	}
 	// 处理结构体类型
 	if isStructType(srcType, file, path) && isStructType(dstType, file, path) {
-		return generateStructConversionFunc(srcType, dstType)
+		return generateStructConversionFunc(srcType, dstType), ""
 	}
 
 	// 处理指针类型
@@ -644,7 +655,7 @@ func isStructType(typeName string, file *ast.File, path string) bool {
 }
 
 // 核心处理函数
-func handleBasicConversion(src, dst string, allowNarrow bool) string {
+func handleBasicConversion(src, dst string, allowNarrow bool) (string, string) {
 	// 整数类型转换
 	if isIntegerType(src) && isIntegerType(dst) {
 		srcWidth := getIntWidth(src)
@@ -652,9 +663,9 @@ func handleBasicConversion(src, dst string, allowNarrow bool) string {
 
 		if srcWidth > dstWidth && !allowNarrow {
 			log.Printf("Narrowing conversion disabled: %s -> %s", src, dst)
-			return ""
+			return "", ""
 		}
-		return dst // 返回类型名称作为转换函数
+		return dst, "" // 返回类型名称作为转换函数
 	}
 
 	// 其他基本类型转换
@@ -702,13 +713,13 @@ func isPointerType(typeName string) bool {
 }
 
 // 新增指针转换处理函数
-func handlePointerConversion(srcType, dstType string, allowNarrow, singleToSlice bool, file *ast.File, path string) string {
+func handlePointerConversion(srcType, dstType string, allowNarrow, singleToSlice bool, file *ast.File, path string) (string, string) {
 	// 获取基础类型
 	baseSrc := strings.TrimPrefix(srcType, "*")
 	baseDst := strings.TrimPrefix(dstType, "*")
 
 	// 递归获取基础类型转换
-	baseConv := getTypeConversion(baseSrc, baseDst, allowNarrow, singleToSlice, file, path)
+	baseConv, importPath := getTypeConversion(baseSrc, baseDst, allowNarrow, singleToSlice, file, path)
 
 	// 生成指针转换逻辑
 	return fmt.Sprintf(`func(src %s) %s {
@@ -718,7 +729,7 @@ func handlePointerConversion(srcType, dstType string, allowNarrow, singleToSlice
         dst := new(%s)
         %s
         return dst
-    }`, srcType, dstType, baseDst, generateElementConversion("*src", "dst", baseConv))
+    }`, srcType, dstType, baseDst, generateElementConversion("*src", "dst", baseConv)), importPath
 }
 
 func Main(dir string) {
@@ -805,9 +816,16 @@ func Main(dir string) {
 				// 提取字段映射关系
 				fields := getFieldMappings(srcType, dstType, file, ignoreCase, allowNarrow, singleToSlice, fieldMappings, path)
 
+				importPath := []string{}
+				for _, field := range fields {
+					if field.ImportPath != "" {
+						importPath = append(importPath, field.ImportPath)
+					}
+				}
 				// 生成完整的拷贝函数
 				generateCompleteCopyFunc(funcDecl, srcVar, dstVar, srcType, dstType, fields)
-
+				// 加入必要的导入
+				addRequiredImports(file, importPath...)
 				// 将修改后的 AST 写回文件
 				writeFile(fset, file, path)
 				return true

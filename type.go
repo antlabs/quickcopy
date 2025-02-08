@@ -47,30 +47,30 @@ func getIntWidth(typeName string) int {
 }
 
 // TOOD 加unsafe开关
-func handleSpecialTypeConversion(srcType, dstType string) string {
+func handleSpecialTypeConversion(srcType, dstType string) (code string, importPath string) {
 	switch {
 	case srcType == "string" && dstType == "float64":
-		return "func(s string) float64 { f, _ := strconv.ParseFloat(s, 64); return f }"
+		return "func(s string) float64 { f, _ := strconv.ParseFloat(s, 64); return f }", "strconv"
 	case srcType == "float64" && dstType == "string":
-		return "func(f float64) string { return strconv.FormatFloat(f, 'f', -1, 64) }"
+		return "func(f float64) string { return strconv.FormatFloat(f, 'f', -1, 64) }", "strconv"
 	case srcType == "string" && dstType == "[]byte":
-		return "func(s string) []byte { return []byte(s) }"
+		return "func(s string) []byte { return []byte(s) }", ""
 	case srcType == "[]byte" && dstType == "string":
-		return "func(b []byte) string { return string(b) }"
+		return "func(b []byte) string { return string(b) }", ""
 	case srcType == "int" && dstType == "string":
-		return "fmt.Sprint"
+		return "fmt.Sprint", "fmt"
 	case srcType == "string" && dstType == "int":
-		return "func(s string) int { i, _ := strconv.Atoi(s); return i }"
+		return "func(s string) int { i, _ := strconv.Atoi(s); return i }", "strconv"
 	case srcType == "time.Time" && dstType == "string":
-		return "func(t time.Time) string { return t.Format(time.RFC3339) }"
+		return "func(t time.Time) string { return t.Format(time.RFC3339) }", "time"
 	case srcType == "string" && dstType == "time.Time":
-		return "func(s string) time.Time { t, _ := time.Parse(time.RFC3339, s); return t }"
+		return "func(s string) time.Time { t, _ := time.Parse(time.RFC3339, s); return t }", "time"
 	case srcType == "uuid.UUID" && dstType == "string":
-		return "func(u uuid.UUID) string { return u.String() }"
+		return "func(u uuid.UUID) string { return u.String() }", "github.com/google/uuid"
 	case srcType == "string" && dstType == "uuid.UUID":
-		return "func(s string) uuid.UUID { u, _ := uuid.Parse(s); return u }"
+		return "func(s string) uuid.UUID { u, _ := uuid.Parse(s); return u }", "github.com/google/uuid"
 	}
-	return ""
+	return "", ""
 }
 
 func isSliceOrArray(t string) bool {
