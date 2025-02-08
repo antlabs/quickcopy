@@ -1,17 +1,12 @@
 package copyslice
 
-// :quickcopy
-func CompanySliceCopy(dst *CompanyDest, src *Company) {// :quickcopy
+func CompanySliceCopy(dst *CompanyDest, src *Company) {
 
-	// :quickcopy
-
-	dst.CompanyName = src.
-		CompanyName
+	dst.CompanyName = src.CompanyName
 
 	dst.Departments = src.Departments
 
-	dst.HeadOffice =
-		src.HeadOffice
+	dst.HeadOffice = src.HeadOffice
 }
 func SliceCopy(dst *SliceDestination, src *SliceSource) {
 	dst.

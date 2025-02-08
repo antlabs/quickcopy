@@ -12,6 +12,9 @@ func addRequiredImports(file *ast.File, importPath ...string) {
 
 	log.Printf("addRequiredImports:%v\n", importPath)
 
+	if len(importPath) == 0 {
+		return
+	}
 	// 需要添加的包
 	requiredImports := make(map[string]bool)
 
